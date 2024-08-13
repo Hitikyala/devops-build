@@ -1,0 +1,11 @@
+echo "node_modules/
+.git/
+.gitignore
+*.log
+.env
+dist/
+*.swp
+*.tmp
+.vscode/
+.idea/
+*.sublime-workspace" > .dockerignore

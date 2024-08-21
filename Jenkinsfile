@@ -1,0 +1,80 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_DEV_REPO = 'hitikyala/dev'
+        DOCKER_PROD_REPO = 'hitikyala/prod'
+        IMAGE_TAG = "latest"
+        GIT_REPO = 'https://github.com/Hitikyala/devops-build.git'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // Pull the latest code from the repository
+                git branch: "dev", url: "https://github.com/Hitikyala/devops-build"
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'dev') {
+                        sh """
+                        docker build -t ${DOCKER_DEV_REPO}:${IMAGE_TAG} .
+                        docker tag ${DOCKER_DEV_REPO}:${IMAGE_TAG} ${DOCKER_DEV_REPO}:latest
+                        docker tag ${DOCKER_DEV_REPO}:${IMAGE_TAG} ${DOCKER_DEV_REPO}:latest
+                        """
+                    } else if (env.BRANCH_NAME == 'master') {
+                        sh """
+                        docker build -t ${DOCKER_PROD_REPO}:${IMAGE_TAG} .
+                        docker tag ${DOCKER_PROD_REPO}:${IMAGE_TAG} ${DOCKER_PROD_REPO}:latest
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        if (env.BRANCH_NAME == 'dev') {
+                            sh """
+                            docker login -u $DOCKER_USER -p $DOCKER_PASS
+                            docker push ${DOCKER_DEV_REPO}:${IMAGE_TAG}
+                            docker push ${DOCKER_DEV_REPO}:latest
+                            """
+                        } else if (env.BRANCH_NAME == 'master') {
+                            sh """
+                            docker login -u $DOCKER_USER -p $DOCKER_PASS
+                            docker push ${DOCKER_PROD_REPO}:${IMAGE_TAG}
+                            docker push ${DOCKER_PROD_REPO}:latest
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Server') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'dev' || env.BRANCH_NAME == 'master') {
+                        sh './deploy.sh'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker system prune -f'
+        }
+    }
+
+    triggers {
+        pollSCM('* * * * *')
+    }
+}
